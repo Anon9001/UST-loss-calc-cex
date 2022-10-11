@@ -1,0 +1,2 @@
+ClientId (can be name or ID but all client IDs will aggogate into one summary),exchange id,api key,secret key,id (some exchanges require it),"password (some exchanges require it like coinbase, some do not)"
+,,,,,
