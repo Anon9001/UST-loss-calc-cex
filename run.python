@@ -1,4 +1,3 @@
-
 import ccxt
 
 #### Pound defines
@@ -36,6 +35,27 @@ def get_trades(symbol, exchange):
             break
     return all_orders
 
+#special binance version of get_trades since binance behavior is different
+def get_trades_binance(symbol, exchange):
+    since = 0
+    all_orders = dict()
+    from_id = 0
+    while since < exchange.milliseconds ():
+        limit = 1000
+        params = {
+            'fromId': from_id,  # exchange-specific non-unified parameter name
+        }
+        if from_id == 0:
+            params = {}
+        orders = exchange.fetch_my_trades(symbol, since, limit, params)
+        from_id = orders[len(orders) - 1]['id']
+        for curOrder in orders:
+            all_orders[curOrder['id']] = curOrder
+        if len(orders) <= 1:
+            break
+
+    return all_orders.values()
+
 ## Gets all exchange keys and types from input.csv and returns a dictionary of unique user ids to array of exchanges
 def get_exchange_args():
     f = open("input.csv", "r")
@@ -59,7 +79,6 @@ def get_exchange_args():
             usersToExchanges += [[uuid, [exchangeUUID, exchangeArgs]]]
 
     return usersToExchanges
-
 
 # Gets UST balance on exchange, UST sold, USD equlivant recived on stablecoins, UST bought / USD used to buy UST after depeg time
 def get_losses(singleEntry):
@@ -103,7 +122,10 @@ def get_losses(singleEntry):
             trades = []
             symbol = curFromTradeSymbol + "/" + curToTradeSymbol
             try:
-                trades = get_trades(symbol, exchange)
+                if exchangeUUID == 'binance':
+                    trades = get_trades_binance(symbol, exchange)
+                else:
+                    trades = get_trades(symbol, exchange)
                 #trades.sort(key=takeTimestamp)
 
                 #only count buys after the first chain halt time in report as depeged / not guarenteed 1 UST to 1 USD purchases
@@ -164,4 +186,6 @@ import csv
 with open("output.csv", "w", newline="") as f:
     writer = csv.writer(f)
     writer.writerows(output)
-    
+
+
+
