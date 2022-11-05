@@ -25,7 +25,7 @@ password  - This is rarely set when an exchange creates an token / API key
 
 
 ## USAGE with arguments to run the program
-USAGE: python3 run.python <snapshot file name> <block height of snapshot> <timestamp of blockheight in miliseconds> <aUST to UST value at block height of snapshot>
+USAGE: python3 run.python &lt;snapshot file name&gt; <block height of snapshot> <timestamp of blockheight in miliseconds> <aUST to UST value at block height of snapshot>
 
 Example: python3 run.python terra1hzh9vpxhsk8253se0vv5jj6etdvxu3nv8z07zu.csv 7607789 1652407129000 1.263
 
