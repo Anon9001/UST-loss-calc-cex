@@ -26,9 +26,13 @@ password  - This is rarely set when an exchange creates an token / API key
 
 ## USAGE with arguments to run the program
 USAGE: python3 run.python <snapshot file name> <block height of snapshot> <timestamp of blockheight in miliseconds> <aUST to UST value at block height of snapshot>
+
 Example: python3 run.python terra1hzh9vpxhsk8253se0vv5jj6etdvxu3nv8z07zu.csv 7607789 1652407129000 1.263
 
 <snapshot file name> - This is the file that was created with the snapshot tool
+
 <block height of snapshot> - This is the block height you used when creating the snapshot file with the snapshot tool
+
 <timestamp of blockheight in miliseconds>  - This is the timestamp in miliseconds that the block was at at the block height used in the snapshot tool
+
 <aUST to UST value at block height of snapshot> - This is the value of aUST.  When you convert 1aUST to UST, it is multiplied by this.  When anchor stopped running, the conversion rate was 1.263
