@@ -1,6 +1,10 @@
 import ccxt
+import sys
+import csv
+import requests
+import json
 
-#### Pound defines
+#### Global Vars
 # Block height of luna update that stopped conversion peg 7607789.  Timestamp 1652407129000, Date and time (GMT): Friday, May 13, 2022 1:58:49 AM
 # All purchases before this time are counted as 1 UST = 1 USD.  After this time they are counted as depeged / unpromosed at 1 UST = 1 USD
 # If they bought 1UST for 10 cents one second before halt time, they are owed 1 USD for that 1 UST
@@ -9,10 +13,62 @@ chain_halt_time = 1652407129000
 # timestamp when we start calculating UST losses of sales when UST was worth less than 1 USD
 losses_after_time = 0
 
+ms_in_month = 1000 * 60 * 60 * 24 * 30
 
 ####### Support functions
 def takeTimestamp(elem):
     return elem['timestamp']
+
+## Get all withdrawal Data from CEX
+def getWithdrawals(exchange):
+    return getDepOrWith(exchange,1)
+
+## Get all deposit Data from CEX
+def getDeposits(exchange):
+    return getDepOrWith(exchange,0)
+
+## Gets from deposit address from the terra blockchain from a transaction provided by a CEX
+def transactionToFromAddress(tx):
+    url = 'https://columbus-fcd.terra.dev/v1/tx/'+tx
+    rawResponse = requests.get(url)
+    res = json.loads(rawResponse.content)
+    return res['tx']['value']['msg'][0]['value']['from_address']
+
+## Helper function for getting deposit / withdrawal data from a CEX
+def getDepOrWith(exchange, mode):
+    all_results = {}
+    total = 0.0
+    addresses = set()
+    since = chain_halt_time
+    while since < exchange.milliseconds():
+        if exchange.has['fetchDeposits']:
+            results = []
+            if mode == 0:
+                results = exchange.fetch_deposits(since = since, params = {'end_time':since + ms_in_month,})
+            else:
+                results = exchange.fetch_withdrawals(since = since, params = {'end_time':since + ms_in_month,})
+            if len(results) < 1:
+                since += ms_in_month
+                continue
+
+            for result in results:
+                since = max(since, result['timestamp'] + 1)
+                if result['currency'] == 'UST' or result['currency'] == 'USTC':
+                    all_results[result['id']] = result
+                    fromAddr = transactionToFromAddress(result['txid'])
+                    addresses.add(fromAddr)
+                    total += result['amount']
+
+    all_results = list(all_results.values())
+   
+    all_results = exchange.sort_by(all_results, 'timestamp')
+    return [addresses, total, all_results]
+
+## Gets the terra addresses used to deposit / withdraw from CEX and the amounts deposited / withdrawn 
+def getDepAndWithData(exchange):
+    withData = getWithdrawals(exchange)
+    depData = getDeposits(exchange)
+    return [withData[0].union(depData[0]), depData[1] - withData[1]]
 
 ## Get trades using CCTX functions.  symbol: (i.e "UST/USDC"), exchange: object created from keys specified by user
 def get_trades(symbol, exchange):
@@ -53,7 +109,6 @@ def get_trades_binance(symbol, exchange):
             all_orders[curOrder['id']] = curOrder
         if len(orders) <= 1:
             break
-
     return all_orders.values()
 
 ## Gets all exchange keys and types from input.csv and returns a dictionary of unique user ids to array of exchanges
@@ -80,19 +135,21 @@ def get_exchange_args():
 
     return usersToExchanges
 
-# Gets UST balance on exchange, UST sold, USD equlivant recived on stablecoins, UST bought / USD used to buy UST after depeg time
-def get_losses(singleEntry):
-
+def createExchange(singleEntry):
     exchangeUUID = singleEntry[0]
     exchangeArgs = singleEntry[1]
 
     try:
         exchange_class = getattr(ccxt, exchangeUUID)
         exchange = exchange_class(exchangeArgs)
-
+        return exchange
     except Exception as e:
         print("Error making exchange getting data for user: "+uuid+" with args:"+"exchangeData"+" error:"+str(e))
+        return none
 
+
+# Gets UST balance on exchange, UST sold, USD equlivant recived on stablecoins, UST bought / USD used to buy UST after depeg time
+def get_losses(exchange, exchangeUUID):
 
     fromTradeSymbol = ['UST', 'USTC']
     toTradeSymbol = ['USD', 'USDC', 'USDT', 'DAI', 'BUSD', 'TUSD', 'USDD', 'GUSD', 'MIM']
@@ -148,26 +205,48 @@ def get_losses(singleEntry):
     #return {'balance':balance, 'sell_ust': total_UST_sold, 'sell_usd': total_USD_recived, 'buy_ust':total_UST_bought, 'buy_usd': total_USD_used}
     return [balance, total_UST_sold, total_USD_recived, total_UST_bought, total_USD_used]
 
+def print_usage_exit():
+    print("USAGE: python3 run.python <snapshot file name> <block height of snapshot> <timestamp of blockheight in miliseconds> <aUST to UST value at block height of snapshot>")
+    print("Example: python3 run.python terra1hzh9vpxhsk8253se0vv5jj6etdvxu3nv8z07zu.csv 7607789 1652407129000 1.263")
+    sys.exit()
+
+
+# Get user specified args
+if len(sys.argv) != 5:
+    print_usage_exit()
+
+addressToAust = {}
+with open(sys.argv[1], mode='r') as infile:
+    reader = csv.reader(infile)
+    addressToAust = {rows[1].lstrip():rows[0] for rows in reader}
+    
+austValue = float(sys.argv[4])
+chain_halt_time = int(sys.argv[3])
 
 
 users = get_exchange_args()
 userData = dict()
 for curUser in users:
-    curUserData = [0,0,0,0,0]
-
+    curUserData = [0,0,0,0,0,0,[]]
     if curUser[0] in userData:
         curUserData = userData[curUser[0]]
-    curResult = get_losses(curUser[1])
+    exchange = createExchange(curUser[1])
+    curResult = get_losses(exchange, curUser[1][0])
     curUserData[0] += curResult[0]
     curUserData[1] += curResult[1]
     curUserData[2] += curResult[2]
     curUserData[3] += curResult[3]
     curUserData[4] += curResult[4]
+
+    dwData = getDepAndWithData(exchange)
+    curUserData[5] += dwData[1]
+    allAddresses = curUserData[6] + list(dwData[0])
+    curUserData[6] = allAddresses
     userData[curUser[0]] = curUserData
 
 
 
-output = [['user name/id', 'Current Balance of UST', 'ust sold', 'usd recived from ust sold', 'average price per ust sold', 'ust bought after depeg', 'usd used to buy ust after depeg'], ['','','','','','','']]
+output = [['user name/id', 'Current Balance of UST', 'ust sold', 'usd recived from ust sold', 'average price per ust sold', 'ust bought after depeg', 'usd used to buy ust after depeg', 'total UST account for in CEX', 'Terra Addresses used', 'total UST unaccounted for (UST in anchor - net UST deposited in all exchanges)'], ['','','','','','','','','','']]
 for userName in userData:
     ud = userData[userName]
 
@@ -177,9 +256,13 @@ for userName in userData:
     except Exception as e:
         pass
 
-    curOutput = [[userName, str(ud[0]), str(ud[1]), str(ud[2]), str(avgPriceForUST), str(ud[3]), str(ud[4])]]
+    totalUstInAnchor = 0
+    for curAddress in ud[6]:
+        if curAddress in addressToAust: 
+            totalUstInAnchor += float(addressToAust[curAddress])/1000000
+    ustUnaccountedFor = (totalUstInAnchor * austValue) - ud[0] - ud[5]
+    curOutput = [[userName, str(ud[0]), str(ud[1]), str(ud[2]), str(avgPriceForUST), str(ud[3]), str(ud[4]), str(ud[5]), str(ud[6]), ustUnaccountedFor ]]
     output += curOutput
-print("\r\n"+ str(output) + "\r\n")
 
 import csv
 
