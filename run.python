@@ -58,17 +58,16 @@ def getDepOrWith(exchange, mode):
             if len(results) < 1:
                 since += ms_in_month
                 continue
-
             for result in results:
                 since = max(since, result['timestamp'] + 1)
-                if result['currency'] == 'UST' or result['currency'] == 'USTC':
+                # OkCoin uses USTOLD
+                if result['currency'] == 'UST' or result['currency'] == 'USTC' or result['currency'] == 'USTOLD':
                     all_results[result['id']] = result
                     fromAddr = transactionToFromAddress(result['txid'])
                     addresses.add(fromAddr)
                     total += result['amount']
-
+ 
     all_results = list(all_results.values())
-   
     all_results = exchange.sort_by(all_results, 'timestamp')
     return [addresses, total, all_results]
 
@@ -282,7 +281,8 @@ def get_losses(exchange, exchangeUUID):
     # When buying UST
     total_UST_bought = 0
     total_USD_used = 0
-
+    #markets = exchange.load_markets()
+    #print("markets are: "+str(markets))
     for curFromTradeSymbol in fromTradeSymbol:
         for curToTradeSymbol in toTradeSymbol:
             trades = []
@@ -310,6 +310,7 @@ def get_losses(exchange, exchangeUUID):
                     total_USD_used += curTrade['amount']
 
             except Exception as e:
+                #print("exception e:"+str(e))
                 pass
     #return {'balance':balance, 'sell_ust': total_UST_sold, 'sell_usd': total_USD_recived, 'buy_ust':total_UST_bought, 'buy_usd': total_USD_used}
     return [balance, total_UST_sold, total_USD_recived, total_UST_bought, total_USD_used]
@@ -359,9 +360,8 @@ for curUser in users:
     userData[curUser[0]] = curUserData
 
 
-
 #output = [['user name/id', 'Current Balance of UST', 'ust sold in CEX', 'usd recived from ust sold total(defi and CEX)', 'average price per ust sold in CEX', 'ust bought after depeg in CEX', 'usd used to buy ust after depeg in CEX', 'total UST account for in CEX', 'Terra Addresses used', 'total UST unaccounted for (UST in anchor and wallet - net UST deposited in all exchanges)'], ['','','','','','','','','','']]
-output = [['user name/id','Total Balance UST', 'Total UST Sold', 'Total usd recovered', 'Total avg price UST', 'Total UST buy after halt', 'Total usd used to buy UST after halt', 'CEX Balance UST', 'CEX UST Sold', 'CEX usd recovered', 'CEX avg price UST', 'CEX UST buy after halt', 'CEX usd used to buy UST after halt', 'Terra UST before depeg', 'Terra UST balance', 'Terra UST sold', 'Terra usd recovered', 'Terra avg price UST', 'Terra UST bought after halt', 'Terra usd used to buy UST after halt','Terra Addresses used'], ['','','','','','','','','','','','','','','','','','','','']]
+output = [['user name/id','Total Balance UST', 'Total UST Sold', 'Total usd recovered', 'Total avg price UST', 'Total UST buy after halt', 'Total usd used to buy UST after halt','CEX UST before depeg' ,'CEX Balance UST', 'CEX UST Sold', 'CEX usd recovered', 'CEX avg price UST', 'CEX UST buy after halt', 'CEX usd used to buy UST after halt', 'Terra UST before depeg', 'Terra UST balance', 'Terra UST sold', 'Terra usd recovered', 'Terra avg price UST', 'Terra UST bought after halt', 'Terra usd used to buy UST after halt','Terra Addresses used'], ['','','','','','','','','','','','','','','','','','','','']]
 for userName in userData:
     ud = userData[userName]
 
@@ -392,7 +392,7 @@ for userName in userData:
     totalAvgPrice = avgPrice(bcUSTUsedForRecovery+ud[1], bcRecovered+ud[2])
 
     #curOutput = [[userName, str(ud[0]), str(ud[1]), str(totalRecovered), str(avgPriceForUST), str(ud[3]), str(ud[4]), str(ud[5]), str(ud[6]), ustUnaccountedFor ]]
-    curOutput = [[userName,str(ud[0]+bcCurrentUSTBalance), str(ud[1]+bcUSTUsedForRecovery), str(ud[2]+bcRecovered), str(totalAvgPrice), str(ud[3]+bcUSTBoughtAfterHalt), str(ud[4]+bcUSDUsedToBuyUSTAfterHalt), str(ud[0]), str(ud[1]), str(ud[2]), str(cexUSTAvgPrice), str(ud[3]), str(ud[4]), str(bcUST + (bcAnchor*austValue)), str(bcCurrentUSTBalance), str(bcUSTUsedForRecovery), str(bcRecovered), str(bcUSTAvgPrice), str(bcUSTBoughtAfterHalt), str(bcUSDUsedToBuyUSTAfterHalt), str(bcAdressesUsed)]]
+    curOutput = [[userName,str(ud[0]+bcCurrentUSTBalance), str(ud[1]+bcUSTUsedForRecovery), str(ud[2]+bcRecovered), str(totalAvgPrice), str(ud[3]+bcUSTBoughtAfterHalt), str(ud[4]+bcUSDUsedToBuyUSTAfterHalt),str(ud[5]*-1) ,str(ud[0]), str(ud[1]), str(ud[2]), str(cexUSTAvgPrice), str(ud[3]), str(ud[4]), str(bcUST + (bcAnchor*austValue)), str(bcCurrentUSTBalance), str(bcUSTUsedForRecovery), str(bcRecovered), str(bcUSTAvgPrice), str(bcUSTBoughtAfterHalt), str(bcUSDUsedToBuyUSTAfterHalt), str(bcAdressesUsed)]]
     output += curOutput
 import csv
 
