@@ -379,13 +379,13 @@ for userName in userData:
         depegBalances = getBalancesAtBlock(depeg_block, allTrans, allBalances, curAddress)
         if depegBalances[3] == True:
             bcAdressesUsed.append(curAddress)
-            bcCurrentUSTBalance += allBalances[0]
-            bcUST += depegBalances[0]
-            bcAnchor += depegBalances[1]
-            bcRecovered += depegBalances[2]
-            bcUSTUsedForRecovery += depegBlanaces[4]
-            bcUSTBoughtAfterHalt += depegBlanaces[5]
-            bcUSDUsedToBuyUSTAfterHalt += depegBlanaces[6]
+            bcCurrentUSTBalance += allBalances[0] / 1000000.0
+            bcUST += depegBalances[0] / 1000000.0
+            bcAnchor += depegBalances[1] / 1000000.0
+            bcRecovered += depegBalances[2] / 1000000.0
+            bcUSTUsedForRecovery += depegBalances[4] / 1000000.0
+            bcUSTBoughtAfterHalt += depegBalances[5] / 1000000.0
+            bcUSDUsedToBuyUSTAfterHalt += depegBalances[6] / 1000000.0
 
     bcUSTAvgPrice = avgPrice(bcUSTUsedForRecovery, bcRecovered)
     cexUSTAvgPrice = avgPrice(ud[1], ud[2]) 
