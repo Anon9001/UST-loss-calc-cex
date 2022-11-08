@@ -1,12 +1,11 @@
 # UST-loss-calc-cex
-UST loss calculator for centralized exchanges
+UST loss calculator for centralized exchanges and the terra wallets connected to them by withdraw or deposit.
+
+Note: Does not work with coinbase or kraken.  Coinbase uses Eth wrapped UST and more code is needed.  Kraken pumps out empty sets when requesting withdrawal / deposit history
 
 
-## Reqired: Get a snapshot using the snapshot tool.  
+## Reqired: For every terra wallet connected to the exchange keys, make sure you send a dust transaction from yourself to yourself with the memo "collect my info urg".  Otherwise the program will not count the wallets as the clients wallet.  The reason for this is if a client uses an exchange wallet to deposit UST into another exchange before they sell or if they bought it from another person to deposit it to their exchange months after the depeg.
 
-The snapshot tool is located here: https://urg-snapshot-tool.s3.us-east-1.amazonaws.com/index.html. Use terra1hzh9vpxhsk8253se0vv5jj6etdvxu3nv8z07zu as the CW20/CW721 token address.  The code for this tool is located here: https://github.com/Anon9001/token-snapshot.  Use the block height you want to use from terra finder (I.E https://finder.terra.money/classic/blocks/7544910).  Please Note the timestamp and convert to Timestamp in milliseconds from a converter (I.E https://www.epochconverter.com/)
-
-NOTE: snapshot tool takes a while to run, like 6 hours.  I've posted an example snapshot in this repo
 
 ## Required: Create CEX read only tokens or get them from clients.  Add them in input.csv in the following format
 ClientId, exchange id, api key,secret key, id, password / pass phrase
@@ -25,14 +24,8 @@ password  - This is rarely set when an exchange creates an token / API key
 
 
 ## USAGE with arguments to run the program
-USAGE: python3 run.python &lt;snapshot file name&gt; &lt;block height of snapshot&gt; &lt;timestamp of blockheight in miliseconds&gt; &lt;aUST to UST value at block height of snapshot&gt;
+USAGE: python3 run.python &lt;pre depeg block height of when to snapshot user's holdings&gt; &lt;timestamp in miliseconds of when purchases of UST are no longer promised as 1 ust to 1 usd&gt; &lt;aUST to UST value at block height of snapshot&gt; 
 
-Example: python3 run.python terra1hzh9vpxhsk8253se0vv5jj6etdvxu3nv8z07zu.csv 7607789 1652407129000 1.263
+Example: python3 run.python 7544910 1652407129000 1.263
 
-&lt;snapshot file name&gt; - This is the file that was created with the snapshot tool
-
-&lt;block height of snapshot&gt; - This is the block height you used when creating the snapshot file with the snapshot tool
-
-&lt;timestamp of blockheight in miliseconds&gt;  - This is the timestamp in miliseconds that the block was at at the block height used in the snapshot tool
-
-&lt;aUST to UST value at block height of snapshot&gt; - This is the value of aUST.  When you convert 1aUST to UST, it is multiplied by this.  When anchor stopped running, the conversion rate was 1.263
+7544910 is the block that DK chose as when ust depegged from usd, 1652407129000 is the time at which the chain halted, 1.263 is the conversion rate when anchor stopped producing interest
