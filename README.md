@@ -24,12 +24,8 @@ password  - This is rarely set when an exchange creates an token / API key
 
 
 ## USAGE with arguments to run the program
-USAGE: python3 run.python &lt;pre depeg block height of when to snapshot user's holdings&gt; &lt;timestamp in miliseconds of when purchases of UST are no longer promised as 1 ust to 1 usd&gt; &lt;aUST to UST value at block height of snapshot&gt; 
+USAGE: python3 run.python &lt;pre depeg block height of when to snapshot user's holdings&gt; &lt;depeg timestamp - timestamp of the depeg block&gt; &lt;timestamp in miliseconds of when purchases of UST are no longer promised as 1 ust to 1 usd&gt; &lt;aUST to UST value at block height of snapshot&gt; 
 
-Example: python3 run.python 7544910 1652407129000 1.263
+Example: python3 run.python 7544910 1651935577000 1652407129000 1.263
 
 7544910 is the block that DK chose as when ust depegged from usd, 1652407129000 is the time at which the chain halted, 1.263 is the conversion rate when anchor stopped producing interest
-<<<<<<< HEAD
-=======
-
->>>>>>> a7c54c7 (merge)
