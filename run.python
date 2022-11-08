@@ -315,8 +315,8 @@ def get_losses(exchange, exchangeUUID):
     return [balance, total_UST_sold, total_USD_recived, total_UST_bought, total_USD_used]
 
 def print_usage_exit():
-    print("USAGE: python3 run.python <pre depeg block height of when to snapshot user's holdings> <timestamp in miliseconds of when purchases of UST are no longer promised as 1 ust to 1 usd> <aUST to UST value at block height of snapshot>")
-    print("Example: python3 run.python 7544910 1652407129000 1.263")
+    print("USAGE: python3 run.python <pre depeg block height of when to snapshot user's holdings> <depeg timestamp - timestamp of the depeg block> <timestamp in miliseconds of when purchases of UST are no longer promised as 1 ust to 1 usd> <aUST to UST value at block height of snapshot>")
+    print("Example: python3 run.python 7544910 1651935577000 1652407129000 1.263")
     print("7544910 is the block that DK chose as when ust depegged from usd, 1652407129000 is the time at which the chain halted, 1.263 is the conversion rate when anchor stopped producing interest")
     sys.exit()
 
@@ -329,12 +329,13 @@ def avgPrice(ustAmt, usdRecovered):
     return avgPriceForUST
 
 # Get user specified args
-if len(sys.argv) != 4:
+if len(sys.argv) != 5:
     print_usage_exit()
 
 depeg_block = int(sys.argv[1])
-chain_halt_time = int(sys.argv[2])
-austValue = float(sys.argv[3])
+depeg_timestamp = int(sys.argv[2])
+chain_halt_time = int(sys.argv[3])
+austValue = float(sys.argv[4])
 
 
 users = get_exchange_args()
