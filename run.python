@@ -118,6 +118,30 @@ def get_trades_binance(symbol, exchange):
             break
     return all_orders.values()
 
+def get_trades_kucoin(symbol, exchange):
+    since = depeg_timestamp
+    all_orders = dict()
+    while since < exchange.milliseconds ():
+        limit = 500
+        params = {}
+        orders = exchange.fetch_my_trades(since = since, limit = limit, params = params)
+        if len(orders) >= 499:
+            since = orders[len(orders) - 1]['timestamp']
+        else:
+            since += (1000 * 60 * 60 * 24 * 7) - 10000
+        for curOrder in orders:
+            if "UST" in curOrder['symbol']:
+                if curOrder['side'] == "buy":
+                    curOrder['side'] = "sell"
+                else:
+                    curOrder['side'] = "buy"
+                cost = curOrder['cost']
+                amount = curOrder['amount']
+                curOrder['cost'] = amount
+                curOrder['amount'] = cost
+                all_orders[curOrder['id']] = curOrder
+    return all_orders.values()
+
 ## Gets all exchange keys and types from input.csv and returns a dictionary of unique user ids to array of exchanges
 def get_exchange_args():
     f = open("input.csv", "r")
@@ -290,6 +314,8 @@ def get_losses(exchange, exchangeUUID):
             try:
                 if exchangeUUID == 'binance':
                     trades = get_trades_binance(symbol, exchange)
+                elif exchangeUUID == 'kucoin':
+                    trades = get_trades_kucoin(symbol, exchange)
                 else:
                     trades = get_trades(symbol, exchange)
                 #trades.sort(key=takeTimestamp)
@@ -297,7 +323,6 @@ def get_losses(exchange, exchangeUUID):
                 #only count buys after the first chain halt time in report as depeged / not guarenteed 1 UST to 1 USD purchases
                 depeged_buys = list(filter(lambda curTrade: (curTrade['timestamp'] > chain_halt_time and curTrade['side'] == 'buy' ), trades))
                 all_sells = list(filter(lambda curTrade: (curTrade['timestamp'] > depeg_timestamp and curTrade['side'] == 'sell' ), trades))
-
                 #depeged_buys.sort(key=takeTimestamp)
                 #all_sells.sort(key=takeTimestamp)
 
@@ -308,10 +333,15 @@ def get_losses(exchange, exchangeUUID):
                 for curTrade in depeged_buys:
                     total_UST_bought += curTrade['cost']
                     total_USD_used += curTrade['amount']
-
+                # Only do kucoin once because it's not using symbol
+                if exchangeUUID == 'kucoin':
+                    break
             except Exception as e:
-                #print("exception e:"+str(e))
-                pass
+                print("exception e:"+str(e))
+                #pass
+        # Only do kucoin once because it's not using symbol
+        if exchangeUUID == 'kucoin':
+            break
     #return {'balance':balance, 'sell_ust': total_UST_sold, 'sell_usd': total_USD_recived, 'buy_ust':total_UST_bought, 'buy_usd': total_USD_used}
     return [balance, total_UST_sold, total_USD_recived, total_UST_bought, total_USD_used]
 
