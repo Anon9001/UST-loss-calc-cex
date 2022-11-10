@@ -337,8 +337,8 @@ def get_losses(exchange, exchangeUUID):
                 if exchangeUUID == 'kucoin':
                     break
             except Exception as e:
-                print("exception e:"+str(e))
-                #pass
+                #print("exception e:"+str(e))
+                pass
         # Only do kucoin once because it's not using symbol
         if exchangeUUID == 'kucoin':
             break
