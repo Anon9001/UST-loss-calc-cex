@@ -46,14 +46,14 @@ Copy and paste this into your terminal window
 # Go to your desktop to make it easier to interact with files / folder
 cd ~/Desktop/
 
-#Install Pip (a python package manager)
+# Install Pip (a python package manager)
 curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
 python3 get-pip.py
 
-#Install CCXT
+# Install CCXT
 pip install ccxt
 
-#Download the UST loss calculator script onto your MacBook
+# Download the UST loss calculator script onto your MacBook
 git clone https://github.com/Anon9001/UST-loss-calc-cex.git
 cd UST-loss-calc-cex
 '''
