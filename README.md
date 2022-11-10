@@ -25,14 +25,14 @@ The Client then gives teh API keys to the admin.
 In your MacBook, go to Applications -> Utilities -> Terminal (you can drag this to the bottom bar for quick access)
 
 Type in 
-'''
+```
 python3 --version
-'''
+```
 
 You should see something like 
-'''
+```
 Python 3.9.6
-'''
+```
 
 Python version 3 should come with an updated OS of MacBook
 
@@ -42,7 +42,7 @@ https://www.python.org/downloads/
 
 Copy and paste this into your terminal window
 
-'''
+```
 # Go to your desktop to make it easier to interact with files / folder
 cd ~/Desktop/
 
@@ -56,7 +56,7 @@ pip install ccxt
 # Download the UST loss calculator script onto your MacBook
 git clone https://github.com/Anon9001/UST-loss-calc-cex.git
 cd UST-loss-calc-cex
-'''
+```
 
 ## Add UST victim data to the input file
 Open your browser go to this URL:
