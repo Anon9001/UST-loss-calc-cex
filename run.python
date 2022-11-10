@@ -391,7 +391,7 @@ for curUser in users:
 
 
 #output = [['user name/id', 'Current Balance of UST', 'ust sold in CEX', 'usd recived from ust sold total(defi and CEX)', 'average price per ust sold in CEX', 'ust bought after depeg in CEX', 'usd used to buy ust after depeg in CEX', 'total UST account for in CEX', 'Terra Addresses used', 'total UST unaccounted for (UST in anchor and wallet - net UST deposited in all exchanges)'], ['','','','','','','','','','']]
-output = [['user name/id','Total Balance UST', 'Total UST Sold', 'Total usd recovered', 'Total avg price UST', 'Total UST buy after halt', 'Total usd used to buy UST after halt','CEX UST before depeg' ,'CEX Balance UST', 'CEX UST Sold', 'CEX usd recovered', 'CEX avg price UST', 'CEX UST buy after halt', 'CEX usd used to buy UST after halt', 'Terra UST before depeg', 'Terra UST balance', 'Terra UST sold', 'Terra usd recovered', 'Terra avg price UST', 'Terra UST bought after halt', 'Terra usd used to buy UST after halt','Terra Addresses used'], ['','','','','','','','','','','','','','','','','','','','']]
+output = [['user name/id','Total Balance UST', 'Total UST Sold', 'Total usd recovered', 'Total avg price UST', 'Total UST buy after halt', 'Total usd used to buy UST after halt','CEX Net deposits after depeg' ,'CEX Current Balance UST', 'CEX UST Sold', 'CEX usd recovered', 'CEX avg price UST', 'CEX UST buy after halt', 'CEX usd used to buy UST after halt', 'Terra UST before depeg', 'Terra UST current balance', 'Terra UST sold', 'Terra usd recovered', 'Terra avg price UST', 'Terra UST bought after halt', 'Terra usd used to buy UST after halt','Terra Addresses used'], ['','','','','','','','','','','','','','','','','','','','']]
 for userName in userData:
     ud = userData[userName]
 
@@ -422,7 +422,7 @@ for userName in userData:
     totalAvgPrice = avgPrice(bcUSTUsedForRecovery+ud[1], bcRecovered+ud[2])
 
     #curOutput = [[userName, str(ud[0]), str(ud[1]), str(totalRecovered), str(avgPriceForUST), str(ud[3]), str(ud[4]), str(ud[5]), str(ud[6]), ustUnaccountedFor ]]
-    curOutput = [[userName,str(ud[0]+bcCurrentUSTBalance), str(ud[1]+bcUSTUsedForRecovery), str(ud[2]+bcRecovered), str(totalAvgPrice), str(ud[3]+bcUSTBoughtAfterHalt), str(ud[4]+bcUSDUsedToBuyUSTAfterHalt),str(ud[5]*-1) ,str(ud[0]), str(ud[1]), str(ud[2]), str(cexUSTAvgPrice), str(ud[3]), str(ud[4]), str(bcUST + (bcAnchor*austValue)), str(bcCurrentUSTBalance), str(bcUSTUsedForRecovery), str(bcRecovered), str(bcUSTAvgPrice), str(bcUSTBoughtAfterHalt), str(bcUSDUsedToBuyUSTAfterHalt), str(bcAdressesUsed)]]
+    curOutput = [[userName,str(ud[0]+bcCurrentUSTBalance), str(ud[1]+bcUSTUsedForRecovery), str(ud[2]+bcRecovered), str(totalAvgPrice), str(ud[3]+bcUSTBoughtAfterHalt), str(ud[4]+bcUSDUsedToBuyUSTAfterHalt),str(ud[5]) ,str(ud[0]), str(ud[1]), str(ud[2]), str(cexUSTAvgPrice), str(ud[3]), str(ud[4]), str(bcUST + (bcAnchor*austValue)), str(bcCurrentUSTBalance), str(bcUSTUsedForRecovery), str(bcRecovered), str(bcUSTAvgPrice), str(bcUSTBoughtAfterHalt), str(bcUSDUsedToBuyUSTAfterHalt), str(bcAdressesUsed)]]
     output += curOutput
 import csv
 
