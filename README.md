@@ -20,7 +20,7 @@ The Client then gives teh API keys to the admin.
 
 
 # Admin Usage
-##Install Python3
+## Install Python3
 
 In your MacBook, go to Applications -> Utilities -> Terminal (you can drag this to the bottom bar for quick access)
 
