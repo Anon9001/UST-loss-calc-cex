@@ -9,31 +9,22 @@ import time
 import datetime
 
 #### Global Vars
-# Block height of luna update that stopped conversion peg 7607789.  Timestamp 1652407129000, Date and time (GMT): Friday, May 13, 2022 1:58:49 AM
-# All purchases before this time are counted as 1 UST = 1 USD.  After this time they are counted as depeged / unpromosed at 1 UST = 1 USD
-# If they bought 1UST for 10 cents one second before halt time, they are owed 1 USD for that 1 UST
-# When purchases of UST are no longer considered 1 to 1 and it's the client's fault that a purchase is made
-chain_halt_time = 1652407129000
 
-# The block on when UST depegged, when to snapshot client's UST / aUST holdings in their wallet
-depeg_block = 7544910
-
-# The timestamp of the depeg block chosen
-depeg_timestamp = 1651935577000
-
+# A few weeks before UST was created.  Used to start the time on when we get transactions on some exchanges
+ust_create_time = 1604192461000
 ms_in_month = 1000 * 60 * 60 * 24 * 30
+# Transactions start time.  always start with 0
+start_times = [0]
+# Conversion rate from anchor ust to ust.  used to figure out the balance of someone's account
+anchor_conversion_rate = 1.263
+
+
+# After this date we can no longer count UST as 1 to 1 so when we sell / buy from / to UST to non-stables on defi then we flag the account
+depeg_timestamp = 1651935577000
 
 ####### Support functions
 def takeTimestamp(elem):
     return elem['timestamp']
-
-## Get all withdrawal Data from CEX
-def getWithdrawals(exchange):
-    return getDepOrWith(exchange,1)
-
-## Get all deposit Data from CEX
-def getDeposits(exchange):
-    return getDepOrWith(exchange,0)
 
 ## Gets from deposit address from the terra blockchain from a transaction provided by a CEX
 def transactionToFromAddress(tx):
@@ -41,41 +32,6 @@ def transactionToFromAddress(tx):
     rawResponse = requests.get(url)
     res = json.loads(rawResponse.content)
     return res['tx']['value']['msg'][0]['value']['from_address']
-
-## Helper function for getting deposit / withdrawal data from a CEX
-def getDepOrWith(exchange, mode):
-    all_results = {}
-    total = 0.0
-    addresses = set()
-    since = depeg_timestamp
-    while since < exchange.milliseconds():
-        if exchange.has['fetchDeposits']:
-            results = []
-            if mode == 0:
-                results = exchange.fetch_deposits(since = since, params = {'end_time':since + ms_in_month,})
-            else:
-                results = exchange.fetch_withdrawals(since = since, params = {'end_time':since + ms_in_month,})
-            if len(results) < 1:
-                since += ms_in_month
-                continue
-            for result in results:
-                since = max(since, result['timestamp'] + 1)
-                # OkCoin uses USTOLD
-                if result['currency'] == 'UST' or result['currency'] == 'USTC' or result['currency'] == 'USTOLD':
-                    all_results[result['id']] = result
-                    fromAddr = transactionToFromAddress(result['txid'])
-                    addresses.add(fromAddr)
-                    total += result['amount']
- 
-    all_results = list(all_results.values())
-    all_results = exchange.sort_by(all_results, 'timestamp')
-    return [addresses, total, all_results]
-
-## Gets the terra addresses used to deposit / withdraw from CEX and the amounts deposited / withdrawn 
-def getDepAndWithData(exchange):
-    withData = getWithdrawals(exchange)
-    depData = getDeposits(exchange)
-    return [withData[0].union(depData[0]), depData[1] - withData[1]]
 
 ## Get trades using CCTX functions.  symbol: (i.e "UST/USDC"), exchange: object created from keys specified by user
 def get_trades(symbol, exchange):
@@ -88,6 +44,7 @@ def get_trades(symbol, exchange):
             'from_id': from_id,  # exchange-specific non-unified parameter name
         }
         orders = exchange.fetch_my_trades(symbol, since, limit, params)
+        print("orders: "+ str(orders))
         if len(orders):
             from_id = orders[len(orders) - 1]['id']
             all_orders += orders
@@ -97,6 +54,40 @@ def get_trades(symbol, exchange):
         else:
             break
     return all_orders
+
+def get_trades_kraken(symbol, exchange):
+    exchange.rateLimit = 10000
+    all_orders = {}
+    offset = 0
+    while True:
+        print("GOT HERE")
+        trades = exchange.fetch_my_trades(symbol=None, since=None, limit=None, params={'ofs': offset})
+        print("trades: "+ str(trades))
+        if len(trades) < 1:
+            break
+        else:
+            for curOrder in trades:
+                if "UST" in curOrder['symbol']:
+                    all_orders[curOrder['id']] = curOrder
+            offset += len(trades)
+    return all_orders.values()
+
+## Get trades using CCTX functions.  symbol: (i.e "UST/USDC"), exchange: object created from keys specified by user
+def get_trades_coinbase(symbol, exchange):
+    since = 0
+    all_orders = []
+    params = {}
+    while since < exchange.milliseconds ():
+        limit = 1000
+        orders = exchange.fetch_my_trades(symbol, since, limit, params)
+        if exchange.last_response_headers._store.get('cb-after'):
+            params= {'after': exchange.last_response_headers._store['cb-after'][1]}
+        if len(orders):
+            all_orders += orders
+        else:
+            break
+    return all_orders
+
 
 #special binance version of get_trades since binance behavior is different
 def get_trades_binance(symbol, exchange):
@@ -119,7 +110,7 @@ def get_trades_binance(symbol, exchange):
     return all_orders.values()
 
 def get_trades_kucoin(symbol, exchange):
-    since = depeg_timestamp
+    since = ust_create_time
     all_orders = dict()
     while since < exchange.milliseconds ():
         limit = 500
@@ -149,19 +140,23 @@ def get_exchange_args():
     usersToExchanges = []
     for x in f:
         curDatExchange = x.split(",")
-        if len(curDatExchange[0]) > 0:
+        if len(curDatExchange)>0 and len(curDatExchange[0]) > 0:
             uuid = curDatExchange[0]
-            exchangeUUID = curDatExchange[1]
+            exchangeUUID = curDatExchange[1].strip(' \t\n\r')
             exchangeArgs = {'enableRateLimit': True}
 
-            if len(curDatExchange[2]) > 0:
-                exchangeArgs['apiKey'] = curDatExchange[2]
-            if len(curDatExchange[3]) > 0:
-                exchangeArgs['secret'] = curDatExchange[3]
-            if len(curDatExchange[4]) > 0:
-                exchangeArgs['id'] = curDatExchange[4]
-            if len(curDatExchange[5].rstrip('\n')) > 0:
-                exchangeArgs['password'] = curDatExchange[5].rstrip('\n')
+            if exchangeUUID == "terra":
+                exchangeArgs['terraAddress'] = curDatExchange[2].strip(' \t\n\r')
+            
+
+            if len(curDatExchange)>2 and len(curDatExchange[2]) > 0:
+                exchangeArgs['apiKey'] = curDatExchange[2].strip(' \t\n\r')
+            if len(curDatExchange)>3 and len(curDatExchange[3]) > 0:
+                exchangeArgs['secret'] = curDatExchange[3].strip(' \t\n\r')
+            if len(curDatExchange)>4 and len(curDatExchange[4]) > 0:
+                exchangeArgs['id'] = curDatExchange[4].strip(' \t\n\r')
+            if len(curDatExchange)>5 and len(curDatExchange[5].rstrip('\n')) > 0:
+                exchangeArgs['password'] = curDatExchange[5].rstrip('\n').strip(' \t\n\r')
             usersToExchanges += [[uuid, [exchangeUUID, exchangeArgs]]]
 
     return usersToExchanges
@@ -209,73 +204,110 @@ def getCurrentBalance(address):
         if curBalance['denom'] == "uusd":
             curUSTBalance = curBalance['amount']
 
-    return [float(curUSTBalance), float(curAnchorBalance)]
+    return float(curUSTBalance)/1000000 + (float(curAnchorBalance)/1000000 * anchor_conversion_rate)
 
 
-def getBalancesAtBlock(blockHeight, transactions, balances, address):
-    curUST = balances[0]
-    curAnchor = balances[1]
+def whContractSend(msg, cAddr):
+    if 'send' in msg['value']['execute_msg']:
+        if 'contract' in msg['value']['execute_msg']['send']:
+            if msg['value']['execute_msg']['send']['contract'] == cAddr:
+                return True
+    return False
+
+#def getBalancesAtBlock(blockHeight, transactions, balances, address):
+def get_trades_defi(transactions, address):
+
+#curTrade['timestamp'] > chain_halt_time and curTrade['side'] == 'buy' 
+#                for curTrade in all_sells:
+#                    total_UST_sold += curTrade['amount']
+#                    total_USD_recived += curTrade['cost']
+#
+#                for curTrade in depeged_buys:
+#                    total_UST_bought += curTrade['cost']
+#                    total_USD_used += curTrade['amount']
+
     scanRequested = False
-    recoveredUSD = 0
-    ustUsedForRecovery = 0
-    ustBoughtAfterHalt = 0
-    usdUsedToBuyUSTAfterHalt = 0
-    # Stable Coin whitelist of contracts used to swap UST with stable coins, BUSD and USDC.  BUSD has 8 decminal places, usdc has 6
-    contractWhitelist = ["terra1szt6cq52akhmzcqw5jhkw3tvdjtl4kvyk3zkhx", "terra1x0ulpvp6m46c5j7t40nj24mjp900954ys2jsnu", "terra1skjr69exm6v8zellgjpaa2emhwutrk5a6dz7dd"]
-    usdcContract = ["terra1x0ulpvp6m46c5j7t40nj24mjp900954ys2jsnu"]
-    busdContract = ["terra1szt6cq52akhmzcqw5jhkw3tvdjtl4kvyk3zkhx", "terra1skjr69exm6v8zellgjpaa2emhwutrk5a6dz7dd"]
+    buyUSTContract = ["terra1skjr69exm6v8zellgjpaa2emhwutrk5a6dz7dd", "terra1xj49zyqrwpv5k928jwfpfy2ha668nwdgkwlrg3", "terra1m6ywlgn6wrjuagcmmezzz2a029gtldhey5k552","terra14z56l0fp2lsf86zy3hty2z47ezkhnthtr9yq76", "terra1wmaty65yt7mjw6fjfymkd9zsm6atsq82d9arcd"]
+    sellUSTContract = ["terra1szt6cq52akhmzcqw5jhkw3tvdjtl4kvyk3zkhx", "terra1x0ulpvp6m46c5j7t40nj24mjp900954ys2jsnu", "terra1qr2k6yjjd5p2kaewqvg93ag74k6gyjr7re37fs"]
+    allTrans = []
     for curTrans in transactions:
-        if int(curTrans['height']) < blockHeight:
-            break
         msg = curTrans['tx']['value']['msg'][0]
-        # Moving UST
+        # Using Anchor contract
+        timestamp = datetime.datetime.strptime(curTrans['timestamp'], "%Y-%m-%dT%H:%M:%SZ").timestamp()*1000
+        # Flagged - manual review because swaps between UST and non stables occured after depeg
+        outTrans = {'timestamp': timestamp, 'hash':curTrans['txhash'], 'side': 'n/a', 'amount': 0, 'cost': 0, 'flagged': False}
         if msg['type'] == "bank/MsgSend":
             if msg['value']['to_address'] == address and msg['value']['from_address'] == address and curTrans['tx']['value']['memo'] == "collect my info urg":
                 scanRequested = True
-            elif msg['value']['to_address'] == address and msg['value']['amount'][0]['denom'] == "uusd":
-                curUST -= float(msg['value']['amount'][0]["amount"])
-            elif msg['value']['to_address'] != address and msg['value']['amount'][0]['denom'] == "uusd":
-                curUST += float(msg['value']['amount'][0]["amount"])
-            # Prob don't need this for aust but just in case, not really front facing code and it's safer
-            elif msg['value']['to_address'] == address and msg['value']['amount'][0]['denom'] == "aust":
-                curAnchor -= float(msg['value']['amount'][0]["amount"])
-            elif msg['value']['to_address'] != address and msg['value']['amount'][0]['denom'] == "aust":
-                curAnchor += float(msg['value']['amount'][0]["amount"])
-        # Using Anchor contract
-        elif msg['type'] == "wasm/MsgExecuteContract" and msg['value']['contract'] == "terra1hzh9vpxhsk8253se0vv5jj6etdvxu3nv8z07zu":
-            if 'send' in msg['value']['execute_msg']:
-                curAnchor += float(msg['value']['execute_msg']['send']['amount'])
-                ustStr = curTrans['logs'][0]['events'][0]['attributes'][1]['value']
-                ustStr = re.sub(r'[^0-9.]', '', ustStr)
-                curUST -= float(ustStr)
-        elif msg['type'] == "wasm/MsgExecuteContract" and msg['value']['contract'] == "terra1sepfj7s0aeg5967uxnfk4thzlerrsktkpelm5s":
-            if 'deposit_stable' in msg['value']['execute_msg']:
-                curUST += float(msg['value']['coins'][0]['amount'])
-                curAnchor -= float(curTrans['logs'][0]['events'][6]['attributes'][8]['value'])
         # Using terra swap contract to real stable coin
-        elif msg['type'] == "wasm/MsgExecuteContract" and msg['value']['contract'] in contractWhitelist:
-            if 'code' not in curTrans and curTrans['tx']['value']['memo'] != "Wormhole - Initiate Transfer":
-                if 'send' in msg['value']['execute_msg']:
-                    curUST -= float(curTrans['logs'][0]['events'][6]['attributes'][12]['value'])
-                    stableCoinValue = float(msg['value']['execute_msg']['send']['amount'])
-                    if msg['value']['contract'] in busdContract:
-                        stableCoinValue /= 100
-                    # UST purchases after chain halt time is not promised equal 1 dollar
-                    timestampOfUSTPurchase = datetime.datetime.strptime(curTrans['timestamp'], "%Y-%m-%dT%H:%M:%SZ").timestamp()*1000
-                    if timestampOfUSTPurchase <= chain_halt_time:
-                        ustUsedForRecovery -= float(msg['value']['coins'][0]['amount'])
-                        recoveredUSD -= stableCoinValue
-                    else:
-                        ustBoughtAfterHalt += float(msg['value']['coins'][0]['amount'])
-                        usdUsedToBuyUSTAfterHalt += stableCoinValue
-                elif 'swap' in msg['value']['execute_msg']:
-                    ustUsedForRecovery += float(msg['value']['coins'][0]['amount'])
-                    curUST += float(msg['value']['coins'][0]['amount'])
-                    stableCoinValue = float(curTrans['logs'][0]['events'][6]['attributes'][16]['value'])
-                    if msg['value']['contract'] in busdContract:
-                        stableCoinValue = stableCoinValue/100
-                    recoveredUSD += stableCoinValue
-    return [curUST, curAnchor, recoveredUSD, scanRequested, ustUsedForRecovery, ustBoughtAfterHalt, usdUsedToBuyUSTAfterHalt]
+        elif msg['type'] == "wasm/MsgExecuteContract":
+            timestampOfUSTPurchase = datetime.datetime.strptime(curTrans['timestamp'], "%Y-%m-%dT%H:%M:%SZ").timestamp()*1000
+            transactionId = curTrans['txhash']
+            #if there is an error in the contract, just continue
+            if 'code' in curTrans:
+                continue
+            if msg['value']['contract'] in buyUSTContract:
+                outTrans['side'] = 'buy'
+                if msg['value']['contract'] == buyUSTContract[0] and whContractSend(msg, "terra1szt6cq52akhmzcqw5jhkw3tvdjtl4kvyk3zkhx"):
+                    # UST bought
+                    outTrans['cost'] = float(curTrans['logs'][0]['events'][6]['attributes'][12]['value'])/1000000
+                    # Stablecoins spent
+                    outTrans['amount'] = float(curTrans['logs'][0]['events'][6]['attributes'][11]['value'])/100000000
+                elif msg['value']['contract'] == buyUSTContract[1] and whContractSend(msg, "terra1l7xu2rl3c7qmtx3r5sd2tz25glf6jh8ul7aag7"):
+                    outTrans['cost'] = float(curTrans['logs'][0]['events'][6]['attributes'][12]['value'])/1000000
+                    outTrans['amount'] = float(curTrans['logs'][0]['events'][6]['attributes'][11]['value'])/1000000
+# buy UST with luna
+                elif msg['value']['contract'] == buyUSTContract[2] and curTrans['logs'][0]['events'][6]['attributes'][4]['value'] == "uluna" and curTrans['logs'][0]['events'][6]['attributes'][5]['value'] == "uusd": 
+                    if timestamp > depeg_timestamp:
+                        outTrans['flagged'] = True
+                    outTrans['cost'] = float(curTrans['logs'][0]['events'][6]['attributes'][7]['value'])/1000000
+                    outTrans['amount'] = float(curTrans['logs'][0]['events'][6]['attributes'][7]['value'])/1000000
+                elif msg['value']['contract'] == buyUSTContract[3]: # This should have 4 events in here.  anc buy, anc sell, anc + ust buy, and+ust sell
+                    if timestamp > depeg_timestamp:
+                        outTrans['flagged'] = True
+#buy UST with ANC
+                    if whContractSend(msg, "terra1qr2k6yjjd5p2kaewqvg93ag74k6gyjr7re37fs"):
+                        outTrans['cost'] = float(curTrans['logs'][0]['events'][6]['attributes'][12]['value'])/1000000
+                        outTrans['amount'] = float(curTrans['logs'][0]['events'][6]['attributes'][12]['value'])/1000000
+# staking ANC or selling UST for stake
+                    elif 'increase_allowance' in msg['value']['execute_msg']: # it's a sell
+                        outTrans['side'] = 'sell'
+                        outTrans['cost'] = float(curTrans['logs'][1]['events'][5]['attributes'][2]['value'].removesuffix('uusd'))/1000000
+                        outTrans['amount'] = float(curTrans['logs'][1]['events'][5]['attributes'][2]['value'].removesuffix('uusd'))/1000000
+# unstake ANC / buy UST                        
+                elif msg['value']['contract'] == buyUSTContract[4] and whContractSend(msg, "terra1qr2k6yjjd5p2kaewqvg93ag74k6gyjr7re37fs"):
+                    if timestamp > depeg_timestamp:
+                        outTrans['flagged'] = True
+                    outTrans['cost'] = float(curTrans['logs'][0]['events'][5]['attributes'][2]['value'].removesuffix('uusd'))/1000000
+                    outTrans['amount'] = float(curTrans['logs'][0]['events'][5]['attributes'][2]['value'].removesuffix('uusd'))/1000000
+                else:
+                    continue
+            elif msg['value']['contract'] in sellUSTContract:
+                outTrans['side'] = 'sell'
+# Sell UST for BUSD
+                if msg['value']['contract'] == sellUSTContract[0] and 'swap' in msg['value']['execute_msg']:
+                    # Amount of UST Sold
+                    outTrans['amount'] = float(curTrans['logs'][0]['events'][6]['attributes'][6]['value'])/1000000
+                    # Amount of USD recived
+                    outTrans['cost'] = float(curTrans['logs'][0]['events'][6]['attributes'][7]['value'])/100000000
+# Sell UST for USDC
+                elif msg['value']['contract'] == sellUSTContract[1] and 'swap' in msg['value']['execute_msg']:
+                    outTrans['amount'] = float(curTrans['logs'][0]['events'][6]['attributes'][6]['value'])/1000000
+                    outTrans['cost'] = float(curTrans['logs'][0]['events'][6]['attributes'][7]['value'])/1000000
+# sell UST and recive ANC
+                elif msg['value']['contract'] == sellUSTContract[2] and 'swap' in msg['value']['execute_msg']:
+                    outTrans['amount'] = float(curTrans['logs'][0]['events'][6]['attributes'][6]['value'])/1000000
+                    outTrans['cost'] = float(curTrans['logs'][0]['events'][6]['attributes'][6]['value'])/1000000
+                else:
+                    continue
+            else:
+                continue
+            allTrans.append(outTrans)
+
+    if scanRequested == False:
+        print("defi address:"+str(address)+" does not have memo collect my info urg ")
+        return []
+    return allTrans 
 
 ### Terra suppport functions end
 
@@ -307,48 +339,54 @@ def get_losses(exchange, exchangeUUID):
     total_USD_used = 0
     #markets = exchange.load_markets()
     #print("markets are: "+str(markets))
+    trades = []
     for curFromTradeSymbol in fromTradeSymbol:
         for curToTradeSymbol in toTradeSymbol:
-            trades = []
             symbol = curFromTradeSymbol + "/" + curToTradeSymbol
             try:
                 if exchangeUUID == 'binance':
-                    trades = get_trades_binance(symbol, exchange)
+                    trades += get_trades_binance(symbol, exchange)
                 elif exchangeUUID == 'kucoin':
-                    trades = get_trades_kucoin(symbol, exchange)
+                    trades += get_trades_kucoin(symbol, exchange)
+                # Not tested for coinbase prime or coinbase
+                elif exchangeUUID == 'coinbasepro' or exchangeUUID == 'coinbaseprime' or exchangeUUID == 'coinbase':
+                    trades += get_trades_coinbase(symbol, exchange)
+                elif exchangeUUID == 'kraken':
+                    trades += get_trades_kraken(symbol, exchange)
                 else:
-                    trades = get_trades(symbol, exchange)
-                #trades.sort(key=takeTimestamp)
+                    trades += get_trades(symbol, exchange)
+                
 
                 #only count buys after the first chain halt time in report as depeged / not guarenteed 1 UST to 1 USD purchases
-                depeged_buys = list(filter(lambda curTrade: (curTrade['timestamp'] > chain_halt_time and curTrade['side'] == 'buy' ), trades))
-                all_sells = list(filter(lambda curTrade: (curTrade['timestamp'] > depeg_timestamp and curTrade['side'] == 'sell' ), trades))
+                #depeged_buys = list(filter(lambda curTrade: (curTrade['timestamp'] > chain_halt_time and curTrade['side'] == 'buy' ), trades))
+                #all_sells = list(filter(lambda curTrade: (curTrade['timestamp'] > depeg_timestamp and curTrade['side'] == 'sell' ), trades))
                 #depeged_buys.sort(key=takeTimestamp)
                 #all_sells.sort(key=takeTimestamp)
-
-                for curTrade in all_sells:
+                '''for curTrade in all_sells:
                     total_UST_sold += curTrade['amount']
                     total_USD_recived += curTrade['cost']
 
                 for curTrade in depeged_buys:
                     total_UST_bought += curTrade['cost']
                     total_USD_used += curTrade['amount']
+                '''
                 # Only do kucoin once because it's not using symbol
-                if exchangeUUID == 'kucoin':
+                if exchangeUUID == 'kucoin' or exchangeUUID == 'kraken':
                     break
             except Exception as e:
-                #print("exception e:"+str(e))
-                pass
+                print("exception e:"+str(e))
+                #pass
         # Only do kucoin once because it's not using symbol
-        if exchangeUUID == 'kucoin':
+        if exchangeUUID == 'kucoin' or exchangeUUID == 'kraken':
             break
     #return {'balance':balance, 'sell_ust': total_UST_sold, 'sell_usd': total_USD_recived, 'buy_ust':total_UST_bought, 'buy_usd': total_USD_used}
-    return [balance, total_UST_sold, total_USD_recived, total_UST_bought, total_USD_used]
+    trades.sort(key=takeTimestamp)
+    return [balance, trades]
 
 def print_usage_exit():
-    print("USAGE: python3 run.python <pre depeg block height of when to snapshot user's holdings> <depeg timestamp - timestamp of the depeg block> <timestamp in miliseconds of when purchases of UST are no longer promised as 1 ust to 1 usd> <aUST to UST value at block height of snapshot>")
-    print("Example: python3 run.python 7544910 1651935577000 1652407129000 1.263")
-    print("7544910 is the block that DK chose as when ust depegged from usd, 1652407129000 is the time at which the chain halted, 1.263 is the conversion rate when anchor stopped producing interest")
+    print("USAGE: python3 run.python <As many optional timestamps to divide up totals>")
+    print("Example: python3 run.python 1651935577000 1652407129000")
+    print("1651935577000 is the timestamp of when Do Kwon says the depeg occured, 1652407129000 is the time at which the chain halted")
     sys.exit()
 
 def avgPrice(ustAmt, usdRecovered):
@@ -360,75 +398,126 @@ def avgPrice(ustAmt, usdRecovered):
     return avgPriceForUST
 
 # Get user specified args
-if len(sys.argv) != 5:
-    print_usage_exit()
+    #print_usage_exit()
 
-depeg_block = int(sys.argv[1])
-depeg_timestamp = int(sys.argv[2])
-chain_halt_time = int(sys.argv[3])
-austValue = float(sys.argv[4])
 
+for i in range(1, len(sys.argv)):
+    start_times.append(int(sys.argv[i]))
 
 users = get_exchange_args()
 userData = dict()
 for curUser in users:
-    curUserData = [0,0,0,0,0,0,[]]
+    curUserData = {'cex': [], 'defi': []}
     if curUser[0] in userData:
         curUserData = userData[curUser[0]]
-    exchange = createExchange(curUser[1])
-    curResult = get_losses(exchange, curUser[1][0])
-    curUserData[0] += curResult[0] # Current balance of UST
-    curUserData[1] += curResult[1] # UST sold
-    curUserData[2] += curResult[2] # USD recovered from sells of UST
-    curUserData[3] += curResult[3] # UST bought after halt
-    curUserData[4] += curResult[4] # USD used to buy UST after halt
+    
+    if curUser[1][0] == "terra":
+        if 'terraAddresses' not in curUserData:
+            curUserData['terraAddresses'] = []
+        allAddresses = curUserData['terraAddresses'] + [curUser[1][1]['terraAddress']]
+        curUserData['terraAddresses'] = allAddresses
+    else:
+        exchange = createExchange(curUser[1])
+        curResult = get_losses(exchange, curUser[1][0])
 
-    dwData = getDepAndWithData(exchange)
-    curUserData[5] += dwData[1]
-    allAddresses = curUserData[6] + list(dwData[0])
-    curUserData[6] = allAddresses
+        curUserData['cex'] = curUserData['cex'] + curResult[1] #save trades
+        if 'balance' not in curUserData:
+            curUserData['balance'] = 0
+        curUserData['balance'] = curUserData['balance'] + curResult[0] # save balance
+    
     userData[curUser[0]] = curUserData
 
-
-#output = [['user name/id', 'Current Balance of UST', 'ust sold in CEX', 'usd recived from ust sold total(defi and CEX)', 'average price per ust sold in CEX', 'ust bought after depeg in CEX', 'usd used to buy ust after depeg in CEX', 'total UST account for in CEX', 'Terra Addresses used', 'total UST unaccounted for (UST in anchor and wallet - net UST deposited in all exchanges)'], ['','','','','','','','','','']]
-output = [['user name/id','Total Balance UST', 'Total UST Sold', 'Total usd recovered', 'Total avg price UST', 'Total UST buy after halt', 'Total usd used to buy UST after halt','CEX Net deposits after depeg' ,'CEX Current Balance UST', 'CEX UST Sold', 'CEX usd recovered', 'CEX avg price UST', 'CEX UST buy after halt', 'CEX usd used to buy UST after halt', 'Terra UST before depeg', 'Terra UST current balance', 'Terra UST sold', 'Terra usd recovered', 'Terra avg price UST', 'Terra UST bought after halt', 'Terra usd used to buy UST after halt','Terra Addresses used'], ['','','','','','','','','','','','','','','','','','','','']]
+# More title labels will be added depending on user inputted args
+output = [['user name/id','0 Total Balance UST', '0 Total UST Sold', '0 Total usd recovered', '0 Total UST Purchased', '0 Total usd paid for UST']]
 for userName in userData:
-    ud = userData[userName]
+    if 'terraAddresses' in userData[userName]:
+        for curAddress in userData[userName]['terraAddresses']:
+            unformattedTrans = getAllTransactions(curAddress)
+            curBalance = getCurrentBalance(curAddress)  # 0 is UST balance, 1 is aUST (but aust is currently non functional)
+            if 'balance' not in userData[userName]:
+                userData[userName]['balance'] = 0
+            userData[userName]['balance'] = userData[userName]['balance'] + curBalance # save balance
 
-    bcUST = 0   # UST in terra at depeg block
-    bcAnchor = 0  # UST in anchor at depeg block
-    bcRecovered = 0 # USD recovered with sales in defi on terra
-    bcUSTUsedForRecovery = 0 # UST used to recover money
-    bcCurrentUSTBalance = 0 # UST balance in terra wallets as of right now
-    bcAdressesUsed = [] # A list of all terra addressed used and marked as someone who owns it
-    bcUSTBoughtAfterHalt = 0
-    bcUSDUsedToBuyUSTAfterHalt = 0
-    for curAddress in ud[6]:
-        allTrans = getAllTransactions(curAddress)
-        allBalances = getCurrentBalance(curAddress)  # 0 is UST balance, 1 is aUST (but aust is currently non functional)
-        depegBalances = getBalancesAtBlock(depeg_block, allTrans, allBalances, curAddress)
-        if depegBalances[3] == True:
-            bcAdressesUsed.append(curAddress)
-            bcCurrentUSTBalance += allBalances[0] / 1000000.0
-            bcUST += depegBalances[0] / 1000000.0
-            bcAnchor += depegBalances[1] / 1000000.0
-            bcRecovered += depegBalances[2] / 1000000.0
-            bcUSTUsedForRecovery += depegBalances[4] / 1000000.0
-            bcUSTBoughtAfterHalt += depegBalances[5] / 1000000.0
-            bcUSDUsedToBuyUSTAfterHalt += depegBalances[6] / 1000000.0
+            defiTrans = get_trades_defi(unformattedTrans, curAddress)
+            userData[userName]['defi'] = userData[userName]['defi'] + defiTrans
 
-    bcUSTAvgPrice = avgPrice(bcUSTUsedForRecovery, bcRecovered)
-    cexUSTAvgPrice = avgPrice(ud[1], ud[2]) 
-    totalAvgPrice = avgPrice(bcUSTUsedForRecovery+ud[1], bcRecovered+ud[2])
+columnTitle = ['username/id', 'total current balance of UST']
+# create output title
+for curTime in start_times:
+    columnTitle += [str(curTime) + ' Total UST Sold', str(curTime) + ' Total usd recovered', str(curTime) + ' Total UST Purchased', str(curTime) + ' Total usd paid for UST']
 
-    #curOutput = [[userName, str(ud[0]), str(ud[1]), str(totalRecovered), str(avgPriceForUST), str(ud[3]), str(ud[4]), str(ud[5]), str(ud[6]), ustUnaccountedFor ]]
-    curOutput = [[userName,str(ud[0]+bcCurrentUSTBalance), str(ud[1]+bcUSTUsedForRecovery), str(ud[2]+bcRecovered), str(totalAvgPrice), str(ud[3]+bcUSTBoughtAfterHalt), str(ud[4]+bcUSDUsedToBuyUSTAfterHalt),str(ud[5]) ,str(ud[0]), str(ud[1]), str(ud[2]), str(cexUSTAvgPrice), str(ud[3]), str(ud[4]), str(bcUST + (bcAnchor*austValue)), str(bcCurrentUSTBalance), str(bcUSTUsedForRecovery), str(bcRecovered), str(bcUSTAvgPrice), str(bcUSTBoughtAfterHalt), str(bcUSDUsedToBuyUSTAfterHalt), str(bcAdressesUsed)]]
-    output += curOutput
+allOutput = [columnTitle]
+# create output string for each user
+for userName in userData:
+    curUserOutput = [userName, userData[userName]['balance']]
+    cexTrades = userData[userName]['cex']
+    cexTrades.sort(key=takeTimestamp)
+
+    defiTrades = userData[userName]['defi']
+    defiTrades.sort(key=takeTimestamp)
+    print("defiTrades: "+str(defiTrades))
+    cexIndex = 0
+    defiIndex = 0
+    for startTimesIndex in range(len(start_times)):
+        ustSold = 0
+        usdRecovered = 0
+        ustPurchased = 0
+        usdSpent = 0
+
+        curTime = start_times[startTimesIndex]
+        if startTimesIndex == len(start_times) - 1:
+            print("reached end")
+            #reached the end
+            while cexIndex < len(cexTrades):
+                curTrade = cexTrades[cexIndex]
+                cexIndex += 1
+                if curTrade['side'] == 'sell':
+                    ustSold += curTrade['amount']
+                    usdRecovered += curTrade['cost']
+                elif curTrade['side'] == 'buy':
+                    ustPurchased += curTrade['cost']
+                    usdSpent += curTrade['amount']
+
+            while defiIndex < len(defiTrades):
+                curTrade = defiTrades[defiIndex]
+                print("defi trade: "+ str(curTrade))
+                defiIndex += 1
+                if curTrade['side'] == 'sell':
+                    ustSold += curTrade['amount']
+                    usdRecovered += curTrade['cost']
+                elif curTrade['side'] == 'buy':
+                    ustPurchased += curTrade['cost']
+                    usdSpent += curTrade['amount']
+        else:
+            curEndTime = start_times[startTimesIndex + 1]
+            while cexIndex < len(cexTrades) and cexTrades[cexIndex]['timestamp'] <= curEndTime:
+                curTrade = cexTrades[cexIndex]
+                cexIndex += 1
+                if curTrade['side'] == 'sell':
+                    ustSold += curTrade['amount']
+                    usdRecovered += curTrade['cost']
+                elif curTrade['side'] == 'buy':
+                    ustPurchased += curTrade['cost']
+                    usdSpent += curTrade['amount']
+
+            while defiIndex < len(defiTrades) and defiTrades[defiIndex]['timestamp'] <= curEndTime:
+                curTrade = defiTrades[defiIndex]
+                defiIndex += 1
+                if curTrade['side'] == 'sell':
+                    ustSold += curTrade['amount']
+                    usdRecovered += curTrade['cost']
+                elif curTrade['side'] == 'buy':
+                    ustPurchased += curTrade['cost']
+                    usdSpent += curTrade['amount']
+
+        curUserOutput += [ustSold, usdRecovered, ustPurchased, usdSpent]
+    allOutput += [curUserOutput]
+
 import csv
 
 with open("output.csv", "w", newline="") as f:
     writer = csv.writer(f)
-    writer.writerows(output)
+    writer.writerows(allOutput)
 
 
 
