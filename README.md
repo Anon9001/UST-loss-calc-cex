@@ -6,16 +6,16 @@ Tested Working for: Coinbase, Kraken, Binance, OkCoin, KuCoin, and Several Defi 
 All Other Exchanges have not been tested yet
 
 # How it works
-The victims of UST gather read only API keys from the centeralized exchanges they used and create dust transactions on the terra wallets they used with the memo "collect my info urg".  The read only API keys are given to the admin then puts all the keys into a file with a user ID / name attached to each key.  The admin then runs the script and gets back a summary of UST losses.  
+The victims of UST gather read only API keys from the centeralized exchanges they used and create dust transactions on the terra wallets they used with the memo "collect my info urg".  The read only API keys and terra wallet addresses are given to the admin then puts all the keys into a file with a user ID / name attached to each key.  The admin then runs the script and gets back a summary of UST losses.  
 
 ## More details on how it works
-The script gets all the trade information from each centeral exchange and all terra wallets from where they deposited / withdrew from.  A snapshot of all the victims UST is gathered at the snapshot block / time provided.  The script then figures out where all the UST went to, if any UST was bought after the hault time or if there was any UST from another source that the victim forgot about.
+All buy and sell trasnactions from the wallets and the exchanges are gathered by user and then divided up by the timestamps given.  Then an output file is created
 
 
 # Client Usage
 The client creates read only API keys from all the Centeralized exchanges (usually takes less than 10 minutes).  The client then goes to each terra address they own and send any amount (preferablly a fraction of a cent to reduce costs) to the same wallet they are sending from with the memo: "collect my info urg".  
 
-The Client then gives teh API keys to the admin.
+The Client then gives the API keys and the terra wallet addresses to the admin.
 
 
 # Admin Usage
