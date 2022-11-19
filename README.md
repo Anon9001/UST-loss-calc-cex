@@ -2,8 +2,7 @@
 Goal of the system:  To calculate UST losses with the least amount of effort from the victims of UST and the person who is running the caculator (the admin).
 
 # Current status:
-Tested Working for: Binance, OkCoin, KuCoin, and Several Defi contracts
-Tested Doesn't work for: Coinbase, Kraken, okx
+Tested Working for: Coinbase, Kraken, Binance, OkCoin, KuCoin, and Several Defi contracts
 All Other Exchanges have not been tested yet
 
 # How it works
@@ -71,11 +70,12 @@ Save the file back into the folder UST-loss-calc-cex as input.csv
 
 ## Running the script
 Run the script by typing the following into your terminal
-python3 run.python &lt;pre depeg block height of when to snapshot user's holdings&gt; &lt;depeg timestamp - timestamp of the depeg block&gt; &lt;timestamp in miliseconds of when purchases of UST are no longer promised as 1 ust to 1 usd&gt; &lt;aUST to UST value at block height of snapshot&gt; 
+python3 run.python &lt;As many optional timestamps to divide up totals&gt;
 
-Example: python3 run.python 7544910 1651935577000 1652407129000 1.263
+Example:python3 run.python 1651935577000 1652407129000
 
-7544910 is the block that DK chose as when ust depegged from usd, 1651935577000 is the timestamp for the depeg block 7544910, 1652407129000 is the time at which the chain halted, 1.263 is the conversion rate when anchor stopped producing interest
+1651935577000 is the timestamp of when Do Kwon says the depeg occured, 1652407129000 is the time at which the chain halted.  This will divide up buys/sells into 3 different categories.  All buys and sells before 1651935577000, all buys and sells between timestamps 1651935577000 and 1652407129000 and all buys/sells after 1652407129000.  
+
 
 ## Viewing results of the script
 After the script is done running, Open google spreed sheet with output.csv
