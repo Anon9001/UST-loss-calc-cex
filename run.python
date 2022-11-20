@@ -44,7 +44,6 @@ def get_trades(symbol, exchange):
             'from_id': from_id,  # exchange-specific non-unified parameter name
         }
         orders = exchange.fetch_my_trades(symbol, since, limit, params)
-        print("orders: "+ str(orders))
         if len(orders):
             from_id = orders[len(orders) - 1]['id']
             all_orders += orders
@@ -60,9 +59,7 @@ def get_trades_kraken(symbol, exchange):
     all_orders = {}
     offset = 0
     while True:
-        print("GOT HERE")
         trades = exchange.fetch_my_trades(symbol=None, since=None, limit=None, params={'ofs': offset})
-        print("trades: "+ str(trades))
         if len(trades) < 1:
             break
         else:
@@ -374,8 +371,8 @@ def get_losses(exchange, exchangeUUID):
                 if exchangeUUID == 'kucoin' or exchangeUUID == 'kraken':
                     break
             except Exception as e:
-                print("exception e:"+str(e))
-                #pass
+                #print("exception e:"+str(e))
+                pass
         # Only do kucoin once because it's not using symbol
         if exchangeUUID == 'kucoin' or exchangeUUID == 'kraken':
             break
@@ -455,7 +452,6 @@ for userName in userData:
 
     defiTrades = userData[userName]['defi']
     defiTrades.sort(key=takeTimestamp)
-    print("defiTrades: "+str(defiTrades))
     cexIndex = 0
     defiIndex = 0
     for startTimesIndex in range(len(start_times)):
@@ -466,7 +462,6 @@ for userName in userData:
 
         curTime = start_times[startTimesIndex]
         if startTimesIndex == len(start_times) - 1:
-            print("reached end")
             #reached the end
             while cexIndex < len(cexTrades):
                 curTrade = cexTrades[cexIndex]
@@ -480,7 +475,6 @@ for userName in userData:
 
             while defiIndex < len(defiTrades):
                 curTrade = defiTrades[defiIndex]
-                print("defi trade: "+ str(curTrade))
                 defiIndex += 1
                 if curTrade['side'] == 'sell':
                     ustSold += curTrade['amount']
